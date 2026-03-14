@@ -1,8 +1,8 @@
-# Nginx Proxy Manager + PostgreSQL Docker Compose
+# Nginx Proxy Manager Docker Compose
 
-Production-ready Docker Compose setup for **Nginx Proxy Manager** with **PostgreSQL 17** database backend.
+Production-ready Docker Compose setup for **Nginx Proxy Manager** with built-in SQLite database.
 
-適用於生產環境的 **Nginx Proxy Manager** Docker Compose 部署方案，搭配 **PostgreSQL 17** 資料庫後端。
+適用於生產環境的 **Nginx Proxy Manager** Docker Compose 部署方案，使用內建 SQLite 資料庫。
 
 ---
 
@@ -27,6 +27,17 @@ Production-ready Docker Compose setup for **Nginx Proxy Manager** with **Postgre
 - **404 Hosts** — Custom 404 pages for unused domains
 - **Streams** — TCP/UDP port forwarding for non-HTTP services
 
+### Why SQLite (No External Database Needed)?
+
+NPM uses **SQLite by default** — the database file is stored inside the `/data` volume. This is the recommended approach for most deployments because:
+
+- NPM stores minimal data (proxy host configs, SSL cert metadata, access lists)
+- No additional container, memory, or password management overhead
+- One less service to monitor and maintain
+- Fully production-stable for typical reverse proxy workloads
+
+> **Note:** NPM also supports PostgreSQL and MySQL/MariaDB as optional external backends for very large-scale deployments, but SQLite handles the vast majority of use cases.
+
 ### Architecture
 
 ```
@@ -37,19 +48,10 @@ Production-ready Docker Compose setup for **Nginx Proxy Manager** with **Postgre
 │  │     Nginx Proxy Manager (app)        │    │
 │  │     Ports: 80, 443, 81              │    │
 │  │     Image: jc21/nginx-proxy-manager  │    │
-│  └──────────────┬───────────────────────┘    │
-│                 │                             │
-│                 │ DB_POSTGRES_HOST=db         │
-│                 │                             │
-│  ┌──────────────▼───────────────────────┐    │
-│  │        PostgreSQL 17 (db)            │    │
-│  │        Port: 5432 (internal)         │    │
-│  │        Image: postgres:17            │    │
+│  │     Database: SQLite (built-in)      │    │
 │  └──────────────────────────────────────┘    │
 │                                              │
-│  Network: npm-network (bridge)               │
-│  Volumes: npm-db-data, npm-app-data,         │
-│           npm-letsencrypt                     │
+│  Volumes: npm-app-data, npm-letsencrypt      │
 └──────────────────────────────────────────────┘
 ```
 
@@ -70,8 +72,8 @@ Production-ready Docker Compose setup for **Nginx Proxy Manager** with **Postgre
 |-------------|----------------|
 | Docker Engine | 20.10+ |
 | Docker Compose | v2.0+ |
-| RAM | 1 GB |
-| Disk Space | 2 GB |
+| RAM | 512 MB |
+| Disk Space | 1 GB |
 
 > **Note:** This setup is also compatible with **Podman** and `podman compose`.
 
@@ -83,14 +85,14 @@ Production-ready Docker Compose setup for **Nginx Proxy Manager** with **Postgre
    cd Woow_nginxpm_docker_compose_all
    ```
 
-2. **Configure environment variables:**
+2. **Configure environment variables (optional):**
    ```bash
    cp .env.example .env
-   # Edit .env and set a strong POSTGRES_PASSWORD
+   # Edit .env to customize ports or timezone if needed
    nano .env
    ```
 
-3. **Start the services:**
+3. **Start the service:**
    ```bash
    docker compose up -d
    ```
@@ -109,9 +111,6 @@ Production-ready Docker Compose setup for **Nginx Proxy Manager** with **Postgre
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_USER` | `npm` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | *(required)* | PostgreSQL password |
-| `POSTGRES_DB` | `npm` | PostgreSQL database name |
 | `NPM_HTTP_PORT` | `80` | Host port for HTTP traffic |
 | `NPM_HTTPS_PORT` | `443` | Host port for HTTPS traffic |
 | `NPM_ADMIN_PORT` | `81` | Host port for Admin UI |
@@ -121,54 +120,38 @@ Production-ready Docker Compose setup for **Nginx Proxy Manager** with **Postgre
 
 | Command | Description |
 |---------|-------------|
-| `docker compose up -d` | Start all services in background |
-| `docker compose down` | Stop and remove containers |
+| `docker compose up -d` | Start service in background |
+| `docker compose down` | Stop and remove container |
 | `docker compose logs -f` | Follow live logs |
-| `docker compose logs -f app` | Follow NPM app logs only |
-| `docker compose logs -f db` | Follow PostgreSQL logs only |
-| `docker compose restart` | Restart all services |
-| `docker compose pull` | Pull latest images |
+| `docker compose restart` | Restart service |
+| `docker compose pull` | Pull latest image |
 | `docker compose up -d --pull always` | Update and restart |
 
 ### Data Persistence
 
-Data is stored in three Docker named volumes:
+Data is stored in two Docker named volumes:
 
 | Volume | Purpose | Container Path |
 |--------|---------|----------------|
-| `npm-db-data` | PostgreSQL database | `/var/lib/postgresql/data` |
-| `npm-app-data` | NPM configuration, proxy hosts, access lists | `/data` |
+| `npm-app-data` | NPM configuration, proxy hosts, access lists, SQLite database | `/data` |
 | `npm-letsencrypt` | SSL certificates from Let's Encrypt | `/etc/letsencrypt` |
 
 ### Backup & Restore
 
-#### Database Backup
+#### Volume Backup
 
 ```bash
-# Backup PostgreSQL database
-docker compose exec db pg_dump -U npm npm > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# Restore PostgreSQL database
-docker compose exec -T db psql -U npm npm < backup_YYYYMMDD_HHMMSS.sql
-```
-
-#### Full Volume Backup
-
-```bash
-# Stop services first
+# Stop service first
 docker compose down
 
 # Backup all volumes
-docker run --rm -v npm-db-data:/data -v $(pwd):/backup alpine \
-  tar czf /backup/npm-db-data_$(date +%Y%m%d).tar.gz -C /data .
-
 docker run --rm -v npm-app-data:/data -v $(pwd):/backup alpine \
   tar czf /backup/npm-app-data_$(date +%Y%m%d).tar.gz -C /data .
 
 docker run --rm -v npm-letsencrypt:/data -v $(pwd):/backup alpine \
   tar czf /backup/npm-letsencrypt_$(date +%Y%m%d).tar.gz -C /data .
 
-# Restart services
+# Restart service
 docker compose up -d
 ```
 
@@ -176,9 +159,6 @@ docker compose up -d
 
 ```bash
 docker compose down
-
-docker run --rm -v npm-db-data:/data -v $(pwd):/backup alpine \
-  sh -c "rm -rf /data/* && tar xzf /backup/npm-db-data_YYYYMMDD.tar.gz -C /data"
 
 docker run --rm -v npm-app-data:/data -v $(pwd):/backup alpine \
   sh -c "rm -rf /data/* && tar xzf /backup/npm-app-data_YYYYMMDD.tar.gz -C /data"
@@ -194,23 +174,22 @@ docker compose up -d
 | Issue | Diagnostic Command | Solution |
 |-------|-------------------|----------|
 | Container won't start | `docker compose logs app` | Check environment variables in `.env` |
-| Database connection error | `docker compose logs db` | Verify `POSTGRES_PASSWORD` is set |
 | Port 80/443 already in use | `sudo ss -tlnp \| grep ':80'` | Change `NPM_HTTP_PORT` / `NPM_HTTPS_PORT` in `.env` |
 | Port 81 already in use | `sudo ss -tlnp \| grep ':81'` | Change `NPM_ADMIN_PORT` in `.env` |
-| Cannot access admin UI | `docker compose ps` | Ensure containers are running and healthy |
+| Cannot access admin UI | `docker compose ps` | Ensure container is running |
 | SSL certificate issues | `docker compose logs app` | Check DNS points to server, ports 80/443 open |
 
 ### How It Works — Setup Guide
 
-1. **PostgreSQL starts first** — The `db` service initializes with the configured credentials and runs a health check (`pg_isready`).
+1. **Single container startup** — `docker compose up -d` pulls the NPM image and starts the container with the configured ports and volumes.
 
-2. **NPM waits for healthy DB** — The `app` service uses `depends_on` with `condition: service_healthy` to ensure the database is ready before starting.
+2. **Built-in SQLite database** — NPM automatically creates and manages a SQLite database at `/data/database.sqlite` inside the container. No external database configuration needed.
 
-3. **NPM connects to PostgreSQL** — Environment variables `DB_POSTGRES_HOST`, `DB_POSTGRES_PORT`, `DB_POSTGRES_USER`, `DB_POSTGRES_PASSWORD`, and `DB_POSTGRES_NAME` tell NPM how to connect.
+3. **First-time initialization** — On first launch, NPM creates its database schema and a default admin user (`admin@example.com` / `changeme`).
 
-4. **First-time initialization** — On first launch, NPM creates its database schema and a default admin user (`admin@example.com` / `changeme`).
+4. **Proxy management** — Access the web UI on port 81 to configure reverse proxy hosts, SSL certificates, and access control rules.
 
-5. **Proxy management** — Access the web UI on port 81 to configure reverse proxy hosts, SSL certificates, and access control rules.
+5. **SSL certificates** — Add proxy hosts with Let's Encrypt SSL. NPM handles certificate issuance and auto-renewal. Certificates are persisted in the `npm-letsencrypt` volume.
 
 ---
 
@@ -228,6 +207,17 @@ docker compose up -d
 - **404 主機** — 為未使用的網域設定自訂 404 頁面
 - **串流轉發（Streams）** — 支援非 HTTP 服務的 TCP/UDP 連接埠轉發
 
+### 為什麼使用 SQLite（不需要外部資料庫）？
+
+NPM **預設使用 SQLite** — 資料庫檔案存放在 `/data` 磁碟區內。這是大多數部署的建議方式，因為：
+
+- NPM 儲存的資料量很小（代理主機設定、SSL 憑證資訊、存取清單）
+- 不需要額外的容器、記憶體或密碼管理
+- 少一個需要監控和維護的服務
+- 對一般的反向代理工作負載完全穩定可靠
+
+> **備註：** NPM 也支援 PostgreSQL 和 MySQL/MariaDB 作為可選的外部資料庫後端，但 SQLite 能應付絕大多數的使用情境。
+
 ### 系統架構
 
 ```
@@ -238,19 +228,10 @@ docker compose up -d
 │  │   Nginx Proxy Manager（app 服務）     │    │
 │  │   連接埠：80、443、81                 │    │
 │  │   映像檔：jc21/nginx-proxy-manager   │    │
-│  └──────────────┬───────────────────────┘    │
-│                 │                             │
-│                 │ DB_POSTGRES_HOST=db         │
-│                 │                             │
-│  ┌──────────────▼───────────────────────┐    │
-│  │      PostgreSQL 17（db 服務）         │    │
-│  │      連接埠：5432（僅內部）           │    │
-│  │      映像檔：postgres:17             │    │
+│  │   資料庫：SQLite（內建）              │    │
 │  └──────────────────────────────────────┘    │
 │                                              │
-│  網路：npm-network（bridge 模式）             │
-│  磁碟區：npm-db-data、npm-app-data、         │
-│          npm-letsencrypt                      │
+│  磁碟區：npm-app-data、npm-letsencrypt       │
 └──────────────────────────────────────────────┘
 ```
 
@@ -271,8 +252,8 @@ docker compose up -d
 |---------|---------|
 | Docker Engine | 20.10+ |
 | Docker Compose | v2.0+ |
-| 記憶體（RAM） | 1 GB |
-| 磁碟空間 | 2 GB |
+| 記憶體（RAM） | 512 MB |
+| 磁碟空間 | 1 GB |
 
 > **備註：** 本方案亦相容 **Podman** 與 `podman compose`。
 
@@ -284,10 +265,10 @@ docker compose up -d
    cd Woow_nginxpm_docker_compose_all
    ```
 
-2. **設定環境變數：**
+2. **設定環境變數（選擇性）：**
    ```bash
    cp .env.example .env
-   # 編輯 .env，設定一組強密碼給 POSTGRES_PASSWORD
+   # 如需調整連接埠或時區，請編輯 .env
    nano .env
    ```
 
@@ -310,9 +291,6 @@ docker compose up -d
 
 | 變數名稱 | 預設值 | 說明 |
 |----------|--------|------|
-| `POSTGRES_USER` | `npm` | PostgreSQL 使用者名稱 |
-| `POSTGRES_PASSWORD` | *（必填）* | PostgreSQL 密碼 |
-| `POSTGRES_DB` | `npm` | PostgreSQL 資料庫名稱 |
 | `NPM_HTTP_PORT` | `80` | 主機的 HTTP 連接埠 |
 | `NPM_HTTPS_PORT` | `443` | 主機的 HTTPS 連接埠 |
 | `NPM_ADMIN_PORT` | `81` | 主機的管理介面連接埠 |
@@ -322,47 +300,31 @@ docker compose up -d
 
 | 指令 | 說明 |
 |------|------|
-| `docker compose up -d` | 在背景啟動所有服務 |
+| `docker compose up -d` | 在背景啟動服務 |
 | `docker compose down` | 停止並移除容器 |
 | `docker compose logs -f` | 即時追蹤日誌 |
-| `docker compose logs -f app` | 僅追蹤 NPM 應用程式日誌 |
-| `docker compose logs -f db` | 僅追蹤 PostgreSQL 日誌 |
-| `docker compose restart` | 重新啟動所有服務 |
+| `docker compose restart` | 重新啟動服務 |
 | `docker compose pull` | 拉取最新映像檔 |
 | `docker compose up -d --pull always` | 更新映像檔並重新啟動 |
 
 ### 資料持久化
 
-資料儲存於三個 Docker 具名磁碟區：
+資料儲存於兩個 Docker 具名磁碟區：
 
 | 磁碟區名稱 | 用途 | 容器內路徑 |
 |-----------|------|-----------|
-| `npm-db-data` | PostgreSQL 資料庫 | `/var/lib/postgresql/data` |
-| `npm-app-data` | NPM 設定、代理主機、存取清單 | `/data` |
+| `npm-app-data` | NPM 設定、代理主機、存取清單、SQLite 資料庫 | `/data` |
 | `npm-letsencrypt` | Let's Encrypt SSL 憑證 | `/etc/letsencrypt` |
 
 ### 備份與還原
 
-#### 資料庫備份
-
-```bash
-# 備份 PostgreSQL 資料庫
-docker compose exec db pg_dump -U npm npm > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# 還原 PostgreSQL 資料庫
-docker compose exec -T db psql -U npm npm < backup_YYYYMMDD_HHMMSS.sql
-```
-
-#### 完整磁碟區備份
+#### 磁碟區備份
 
 ```bash
 # 先停止服務
 docker compose down
 
 # 備份所有磁碟區
-docker run --rm -v npm-db-data:/data -v $(pwd):/backup alpine \
-  tar czf /backup/npm-db-data_$(date +%Y%m%d).tar.gz -C /data .
-
 docker run --rm -v npm-app-data:/data -v $(pwd):/backup alpine \
   tar czf /backup/npm-app-data_$(date +%Y%m%d).tar.gz -C /data .
 
@@ -378,9 +340,6 @@ docker compose up -d
 ```bash
 docker compose down
 
-docker run --rm -v npm-db-data:/data -v $(pwd):/backup alpine \
-  sh -c "rm -rf /data/* && tar xzf /backup/npm-db-data_YYYYMMDD.tar.gz -C /data"
-
 docker run --rm -v npm-app-data:/data -v $(pwd):/backup alpine \
   sh -c "rm -rf /data/* && tar xzf /backup/npm-app-data_YYYYMMDD.tar.gz -C /data"
 
@@ -395,23 +354,22 @@ docker compose up -d
 | 問題 | 診斷指令 | 解決方式 |
 |------|---------|---------|
 | 容器無法啟動 | `docker compose logs app` | 檢查 `.env` 中的環境變數 |
-| 資料庫連線錯誤 | `docker compose logs db` | 確認 `POSTGRES_PASSWORD` 已設定 |
 | 連接埠 80/443 被占用 | `sudo ss -tlnp \| grep ':80'` | 修改 `.env` 中的 `NPM_HTTP_PORT` / `NPM_HTTPS_PORT` |
 | 連接埠 81 被占用 | `sudo ss -tlnp \| grep ':81'` | 修改 `.env` 中的 `NPM_ADMIN_PORT` |
-| 無法存取管理介面 | `docker compose ps` | 確認容器正在執行且狀態健康 |
+| 無法存取管理介面 | `docker compose ps` | 確認容器正在執行 |
 | SSL 憑證問題 | `docker compose logs app` | 確認 DNS 指向伺服器，連接埠 80/443 已開啟 |
 
 ### 架設方式說明
 
-1. **PostgreSQL 優先啟動** — `db` 服務以設定的帳號密碼初始化，並透過健康檢查（`pg_isready`）確認就緒。
+1. **單一容器啟動** — `docker compose up -d` 拉取 NPM 映像檔並以設定的連接埠和磁碟區啟動容器。
 
-2. **NPM 等待資料庫就緒** — `app` 服務使用 `depends_on` 搭配 `condition: service_healthy`，確保資料庫就緒後才啟動。
+2. **內建 SQLite 資料庫** — NPM 自動在容器內的 `/data/database.sqlite` 建立並管理 SQLite 資料庫，不需要任何外部資料庫設定。
 
-3. **NPM 連線至 PostgreSQL** — 透過環境變數 `DB_POSTGRES_HOST`、`DB_POSTGRES_PORT`、`DB_POSTGRES_USER`、`DB_POSTGRES_PASSWORD` 及 `DB_POSTGRES_NAME` 設定資料庫連線。
+3. **首次初始化** — 首次啟動時，NPM 會自動建立資料庫結構及預設管理帳號（`admin@example.com` / `changeme`）。
 
-4. **首次初始化** — 首次啟動時，NPM 會自動建立資料庫結構及預設管理帳號（`admin@example.com` / `changeme`）。
+4. **代理管理** — 透過連接埠 81 的網頁介面設定反向代理主機、SSL 憑證及存取控制規則。
 
-5. **代理管理** — 透過連接埠 81 的網頁介面設定反向代理主機、SSL 憑證及存取控制規則。
+5. **SSL 憑證** — 新增代理主機時可啟用 Let's Encrypt SSL。NPM 會處理憑證的簽發和自動續約。憑證存放在 `npm-letsencrypt` 磁碟區。
 
 ---
 
@@ -426,20 +384,20 @@ services:
     expected_state: running
     health_indicator: HTTP 200 on port 81
     startup_time: ~30 seconds
-    depends: db (healthy)
-  db:
-    expected_state: running
-    health_indicator: pg_isready returns 0
-    startup_time: ~10 seconds
+    database: SQLite (built-in, no external DB needed)
 
-# Required Environment Variables
-required:
-  - POSTGRES_PASSWORD  # Must be set, no default
+# Optional Environment Variables (all have defaults)
+optional:
+  - NPM_HTTP_PORT   # default: 80
+  - NPM_HTTPS_PORT  # default: 443
+  - NPM_ADMIN_PORT  # default: 81
+  - TZ              # default: Asia/Taipei
 
-# Network Architecture
-network:
-  type: bridge
-  name: npm-network
-  internal_communication: app ↔ db via hostname "db"
-  external_ports: [80, 443, 81]
+# Volumes
+volumes:
+  npm-app-data: /data (config + SQLite DB)
+  npm-letsencrypt: /etc/letsencrypt (SSL certs)
+
+# External Ports
+ports: [80, 443, 81]
 ```
