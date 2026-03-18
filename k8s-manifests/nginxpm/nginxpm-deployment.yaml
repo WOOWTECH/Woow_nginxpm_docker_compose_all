@@ -1,0 +1,68 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginxpm
+  namespace: nginxpm
+  labels:
+    app: nginxpm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginxpm
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: nginxpm
+    spec:
+      containers:
+        - name: nginxpm
+          image: jc21/nginx-proxy-manager:latest
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: admin-ui
+              containerPort: 81
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: letsencrypt
+              mountPath: /etc/letsencrypt
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: admin-ui
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: admin-ui
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nginxpm-data
+        - name: letsencrypt
+          persistentVolumeClaim:
+            claimName: nginxpm-letsencrypt
