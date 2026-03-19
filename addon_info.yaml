@@ -1,0 +1,9 @@
+source:
+  type: github-releases
+  repo: NginxProxyManager/nginx-proxy-manager
+  current_version: v2.12.4
+config:
+  version_template: "{{version}}"
+  image: woowtech/woow-nginxproxymanager
+test:
+  enable: true
