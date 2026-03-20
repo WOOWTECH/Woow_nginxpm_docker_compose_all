@@ -7,6 +7,18 @@
 
 ![Nginx Proxy Manager](https://nginxproxymanager.com/screenshots/proxy-hosts.png)
 
+## Installation
+
+To install, click the button below:
+
+[![Open your Home Assistant instance and show the dashboard of an add-on.](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=woow-nginxproxymanager&repository_url=https%3A%2F%2Fgithub.com%2FWOOWTECH%2FWoow_nginxpm_docker_compose_all)
+
+Or add the repository manually:
+
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWOOWTECH%2FWoow_nginxpm_docker_compose_all)
+
+Then navigate to **Settings → Add-ons → Add-on Store**, find "Woow Nginx Proxy Manager" and click **INSTALL**.
+
 ## 架構組成
 
 此 Add-on 為一體式 (All-in-One) 部署，包含：
